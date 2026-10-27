@@ -1,0 +1,26 @@
+{
+  "name": "smart-waste-collection-tracking-system",
+  "version": "1.0.0",
+  "description": "Smart Waste Collection Tracking System (India) with interactive GIS map, bin sensor telemetry, route optimization (Nearest-Neighbour + 2-opt), truck GPS tracking, and citizen complaints.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": [
+    "waste-management",
+    "smart-city",
+    "route-optimization",
+    "leaflet",
+    "india-gis",
+    "express",
+    "sqlite"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "better-sqlite3": "11.3.0",
+    "cors": "2.8.5",
+    "express": "4.19.2"
+  }
+}

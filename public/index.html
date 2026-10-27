@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Smart Waste Collection Tracking System (India)</title>
+  
+  <!-- Leaflet CSS (Pinned 1.9.4) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  
+  <!-- App Stylesheet -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- Top Application Header -->
+  <header class="app-header">
+    <div class="brand">
+      <button class="mobile-menu-btn" id="mobile-menu-toggle" aria-label="Toggle menu">☰</button>
+      <div class="brand-icon">♻️</div>
+      <h1>
+        WasteTrack India
+        <span class="india-pill">Live GIS</span>
+      </h1>
+    </div>
+
+    <!-- Search Jump Box (No external geocoding) -->
+    <div class="header-center">
+      <div class="search-box-wrapper">
+        <span class="search-icon">🔍</span>
+        <input 
+          type="text" 
+          id="global-search-input" 
+          class="search-input" 
+          placeholder="Search state (e.g. Maharashtra, Ladakh) or city..." 
+          autocomplete="off"
+        >
+        <div id="search-results-dropdown" class="search-results-dropdown"></div>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <button class="btn btn-secondary btn-sm btn-load-demo-data" title="Load sample Indian bins & trucks for testing">
+        ✨ Load Demo Data
+      </button>
+      <button class="btn btn-secondary btn-sm" id="theme-toggle-btn" title="Toggle Light/Dark theme">
+        🌙 Dark Mode
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="app-main">
+
+    <!-- Left Control Sidebar -->
+    <aside class="app-sidebar" id="app-sidebar">
+      <nav class="sidebar-tabs" role="tablist">
+        <button class="tab-btn active" data-tab="dashboard" role="tab">📊 Dashboard</button>
+        <button class="tab-btn" data-tab="bins" role="tab">🗑️ Bins</button>
+        <button class="tab-btn" data-tab="trucks" role="tab">🚛 Trucks</button>
+        <button class="tab-btn" data-tab="routes" role="tab">⚡ Route Planner</button>
+        <button class="tab-btn" data-tab="complaints" role="tab">📢 Complaints</button>
+        <button class="tab-btn" data-tab="reports" role="tab">📁 Reports</button>
+      </nav>
+
+      <div class="sidebar-content">
+
+        <!-- ===================================================================
+             TAB 1: DASHBOARD
+             =================================================================== -->
+        <section class="tab-panel active" id="tab-dashboard">
+          
+          <!-- Top Metric Cards -->
+          <div class="stats-grid">
+            <div class="stat-card">
+              <span class="stat-label">Total Bins</span>
+              <span class="stat-val accent" id="stat-total-bins">0</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Needs Pickup</span>
+              <span class="stat-val bad" id="stat-needing-pickup">0</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Active Trucks</span>
+              <span class="stat-val" id="stat-active-trucks">0</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Open Complaints</span>
+              <span class="stat-val warn" id="stat-open-complaints">0</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Total Pickups</span>
+              <span class="stat-val accent" id="stat-total-collections">0</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Route Planned</span>
+              <span class="stat-val" id="stat-total-distance">0 km</span>
+            </div>
+          </div>
+
+          <!-- Charts Grid -->
+          <div class="charts-grid">
+            <div class="chart-box">
+              <h3>🚨 Bins Needing Pickup by State</h3>
+              <div class="chart-container">
+                <canvas id="chart-needing-pickup"></canvas>
+              </div>
+            </div>
+
+            <div class="chart-box">
+              <h3>📈 Collections in the Last 7 Days</h3>
+              <div class="chart-container">
+                <canvas id="chart-collections"></canvas>
+              </div>
+            </div>
+
+            <div class="chart-box">
+              <h3>📢 Citizen Complaints by Category</h3>
+              <div class="chart-container">
+                <canvas id="chart-complaints"></canvas>
+              </div>
+            </div>
+
+            <div class="chart-box">
+              <h3>📊 Average Bin Fill Level by State</h3>
+              <div class="chart-container">
+                <canvas id="chart-avg-fill"></canvas>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===================================================================
+             TAB 2: BINS MANAGEMENT
+             =================================================================== -->
+        <section class="tab-panel" id="tab-bins">
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">➕ Add New Waste Bin</h2>
+            </div>
+            <form id="form-add-bin">
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="bin-form-name">Bin Name / ID *</label>
+                  <input type="text" id="bin-form-name" placeholder="e.g. BIN-MUM-01" required>
+                </div>
+                <div class="form-group">
+                  <label for="bin-form-state">State / UT *</label>
+                  <select id="bin-form-state" required>
+                    <option value="">Loading States...</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="bin-form-city">City / Area / Ward *</label>
+                <input type="text" id="bin-form-city" placeholder="e.g. Bandra West, Mumbai" required>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="bin-form-lat">Latitude (6° to 37.5°N) *</label>
+                  <input type="number" step="0.000001" id="bin-form-lat" placeholder="19.0596" required>
+                </div>
+                <div class="form-group">
+                  <label for="bin-form-lng">Longitude (68° to 97.5°E) *</label>
+                  <input type="number" step="0.000001" id="bin-form-lng" placeholder="72.8295" required>
+                </div>
+              </div>
+
+              <div style="margin-bottom: 12px;">
+                <button type="button" class="btn btn-secondary btn-sm" id="btn-pick-bin-coord">
+                  📍 Pick on Map
+                </button>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="bin-form-height">Height (cm)</label>
+                  <input type="number" id="bin-form-height" value="100" min="10" max="500" required>
+                </div>
+                <div class="form-group">
+                  <label for="bin-form-threshold">Pickup Threshold (%)</label>
+                  <input type="number" id="bin-form-threshold" value="80" min="10" max="100" required>
+                </div>
+              </div>
+
+              <button type="submit" class="btn btn-primary btn-block">Add Waste Bin</button>
+            </form>
+          </div>
+
+          <!-- Bins Table -->
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">📋 Registered Bins</h2>
+            </div>
+            
+            <div class="table-toolbar">
+              <input type="text" class="table-search" id="search-bins-input" placeholder="Search bins...">
+              <select id="filter-bins-state" style="max-width: 170px; font-size: 0.8rem; padding: 4px;">
+                <option value="">All States / UTs</option>
+              </select>
+            </div>
+
+            <div class="table-responsive">
+              <table>
+                <thead>
+                  <tr>
+                    <th data-table="bins" data-sort="name">Name ⬍</th>
+                    <th data-table="bins" data-sort="state">State ⬍</th>
+                    <th data-table="bins" data-sort="city">City ⬍</th>
+                    <th data-table="bins" data-sort="height_cm">Height ⬍</th>
+                    <th data-table="bins" data-sort="threshold">Threshold ⬍</th>
+                    <th data-table="bins" data-sort="fill_percent">Fill Level ⬍</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="bins-table-body">
+                  <tr>
+                    <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 16px;">
+                      No bins created. Use the form above or click "Load Demo Data".
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===================================================================
+             TAB 3: TRUCKS MANAGEMENT
+             =================================================================== -->
+        <section class="tab-panel" id="tab-trucks">
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">➕ Register Garbage Truck</h2>
+            </div>
+            <form id="form-add-truck">
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="truck-form-number">Truck Registration Number *</label>
+                  <input type="text" id="truck-form-number" placeholder="e.g. MH-02-CW-4921" required>
+                </div>
+                <div class="form-group">
+                  <label for="truck-form-capacity">Capacity (kg) *</label>
+                  <input type="number" id="truck-form-capacity" placeholder="3500" min="100" required>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="truck-form-driver">Driver Name *</label>
+                  <input type="text" id="truck-form-driver" placeholder="e.g. Ramesh Patil" required>
+                </div>
+                <div class="form-group">
+                  <label for="truck-form-phone">Driver Phone (10-digit Indian) *</label>
+                  <input type="tel" id="truck-form-phone" placeholder="9820112233" pattern="[6-9][0-9]{9}" required>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="truck-form-lat">Starting Latitude *</label>
+                  <input type="number" step="0.000001" id="truck-form-lat" placeholder="19.0760" required>
+                </div>
+                <div class="form-group">
+                  <label for="truck-form-lng">Starting Longitude *</label>
+                  <input type="number" step="0.000001" id="truck-form-lng" placeholder="72.8777" required>
+                </div>
+              </div>
+
+              <div style="margin-bottom: 12px;">
+                <button type="button" class="btn btn-secondary btn-sm" id="btn-pick-truck-coord">
+                  📍 Pick on Map
+                </button>
+              </div>
+
+              <button type="submit" class="btn btn-primary btn-block">Register Truck</button>
+            </form>
+          </div>
+
+          <!-- Trucks Table -->
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">🚛 Active Fleet</h2>
+            </div>
+
+            <div class="table-toolbar">
+              <input type="text" class="table-search" id="search-trucks-input" placeholder="Search trucks or driver...">
+            </div>
+
+            <div class="table-responsive">
+              <table>
+                <thead>
+                  <tr>
+                    <th data-table="trucks" data-sort="number">Truck Number ⬍</th>
+                    <th data-table="trucks" data-sort="driver_name">Driver ⬍</th>
+                    <th data-table="trucks" data-sort="driver_phone">Phone ⬍</th>
+                    <th data-table="trucks" data-sort="capacity_kg">Capacity ⬍</th>
+                    <th>Current GPS</th>
+                    <th>Last Update</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="trucks-table-body">
+                  <tr>
+                    <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 16px;">
+                      No trucks registered. Add a truck using the form above.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===================================================================
+             TAB 4: ROUTE PLANNER
+             =================================================================== -->
+        <section class="tab-panel" id="tab-routes">
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">⚡ Smart Route Optimizer</h2>
+            </div>
+            <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 12px;">
+              Optimizes pickup sequences using Nearest-Neighbour and a 2-opt geometric pass for bins at or above threshold.
+            </p>
+
+            <form id="form-plan-route">
+              <div class="form-group">
+                <label for="route-truck-select">Select Garbage Truck *</label>
+                <select id="route-truck-select" required>
+                  <option value="">Select a Garbage Truck</option>
+                </select>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="route-filter-state">Region / State Filter</label>
+                  <select id="route-filter-state">
+                    <option value="">All India</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="route-speed-input">Transit Speed (km/h)</label>
+                  <input type="number" id="route-speed-input" value="25" min="5" max="90" required>
+                </div>
+              </div>
+
+              <button type="submit" class="btn btn-primary btn-block">Compute Optimal Route</button>
+            </form>
+          </div>
+
+          <!-- Route Results Card -->
+          <div class="card" id="route-results-card" style="display: none;">
+            <div class="card-header">
+              <h2 class="card-title">📍 Planned Route Summary</h2>
+            </div>
+            <div class="stats-grid" style="grid-template-columns: repeat(2, 1fr); margin-bottom: 10px;">
+              <div class="stat-card">
+                <span class="stat-label">Assigned Truck</span>
+                <span class="stat-val" style="font-size: 1.1rem;" id="route-res-truck">-</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label">Total Stops</span>
+                <span class="stat-val accent" id="route-res-stops">0</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label">Total Distance</span>
+                <span class="stat-val" style="font-size: 1.1rem;" id="route-res-dist">0 km</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label">Estimated Time</span>
+                <span class="stat-val" style="font-size: 1.1rem;" id="route-res-eta">0 mins</span>
+              </div>
+            </div>
+
+            <h3 style="font-size: 0.88rem; font-weight: 700; margin: 12px 0 6px;">Stop-by-Stop Itinerary:</h3>
+            <div id="route-stops-container" class="route-stops-list"></div>
+          </div>
+        </section>
+
+        <!-- ===================================================================
+             TAB 5: CITIZEN COMPLAINTS
+             =================================================================== -->
+        <section class="tab-panel" id="tab-complaints">
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">📢 Citizen Waste Grievance</h2>
+            </div>
+            <form id="form-complaint">
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="complaint-form-name">Citizen Full Name *</label>
+                  <input type="text" id="complaint-form-name" placeholder="e.g. Aakash Sharma" required>
+                </div>
+                <div class="form-group">
+                  <label for="complaint-form-phone">Mobile Number (10 digits starting 6-9) *</label>
+                  <input type="tel" id="complaint-form-phone" placeholder="9876543210" pattern="[6-9][0-9]{9}" required>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="complaint-form-state">State / UT *</label>
+                  <select id="complaint-form-state" required>
+                    <option value="">Select State</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="complaint-form-city">City / Area *</label>
+                  <input type="text" id="complaint-form-city" placeholder="e.g. Bandra West, Mumbai" required>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="complaint-form-type">Complaint Category *</label>
+                  <select id="complaint-form-type" required>
+                    <option value="Overflow">Overflow</option>
+                    <option value="Missed pickup">Missed pickup</option>
+                    <option value="Damaged bin">Damaged bin</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="complaint-form-bin">Associated Bin ID (Optional)</label>
+                  <input type="number" id="complaint-form-bin" placeholder="e.g. 1">
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="complaint-form-desc">Detailed Description *</label>
+                <textarea id="complaint-form-desc" rows="2" placeholder="Describe the waste issue or location details..." required></textarea>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="complaint-form-lat">Latitude (Optional)</label>
+                  <input type="number" step="0.000001" id="complaint-form-lat" placeholder="19.0596">
+                </div>
+                <div class="form-group">
+                  <label for="complaint-form-lng">Longitude (Optional)</label>
+                  <input type="number" step="0.000001" id="complaint-form-lng" placeholder="72.8295">
+                </div>
+              </div>
+
+              <div style="margin-bottom: 12px;">
+                <button type="button" class="btn btn-secondary btn-sm" id="btn-pick-complaint-coord">
+                  📍 Pick Location on Map
+                </button>
+              </div>
+
+              <button type="submit" class="btn btn-primary btn-block">Submit Grievance</button>
+            </form>
+          </div>
+
+          <!-- Complaints Table -->
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">📋 Grievances Log</h2>
+            </div>
+
+            <div class="table-toolbar">
+              <input type="text" class="table-search" id="search-complaints-input" placeholder="Search complaints...">
+              <select id="filter-complaints-state" style="max-width: 150px; font-size: 0.8rem; padding: 4px;">
+                <option value="">All States</option>
+              </select>
+              <select id="filter-complaints-status" style="max-width: 120px; font-size: 0.8rem; padding: 4px;">
+                <option value="">All Statuses</option>
+                <option value="Open">Open</option>
+                <option value="In progress">In progress</option>
+                <option value="Resolved">Resolved</option>
+              </select>
+            </div>
+
+            <div class="table-responsive">
+              <table>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th data-table="complaints" data-sort="name">Citizen ⬍</th>
+                    <th data-table="complaints" data-sort="city">Location ⬍</th>
+                    <th data-table="complaints" data-sort="type">Type ⬍</th>
+                    <th>Description</th>
+                    <th data-table="complaints" data-sort="status">Status ⬍</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="complaints-table-body">
+                  <tr>
+                    <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 16px;">
+                      No citizen complaints logged.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===================================================================
+             TAB 6: REPORTS & EXPORTS
+             =================================================================== -->
+        <section class="tab-panel" id="tab-reports">
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">📥 Export System Data (CSV)</h2>
+            </div>
+            <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 14px;">
+              Download clean comma-separated values (CSV) reports for external audit, GIS spreadsheets, and offline archival.
+            </p>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+              <a href="/api/export/bins" class="btn btn-secondary" download>
+                📥 Download Bins CSV
+              </a>
+              <a href="/api/export/collections" class="btn btn-secondary" download>
+                📥 Download Collections CSV
+              </a>
+              <a href="/api/export/complaints" class="btn btn-secondary" download>
+                📥 Download Complaints CSV
+              </a>
+            </div>
+          </div>
+
+          <!-- Collection History Table -->
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">📜 Pickup History Log</h2>
+            </div>
+
+            <div class="table-toolbar">
+              <select id="filter-collections-state" style="max-width: 170px; font-size: 0.8rem; padding: 4px;">
+                <option value="">All States</option>
+              </select>
+            </div>
+
+            <div class="table-responsive">
+              <table>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Bin</th>
+                    <th>Truck</th>
+                    <th>State</th>
+                    <th>Timestamp</th>
+                  </tr>
+                </thead>
+                <tbody id="collections-table-body">
+                  <tr>
+                    <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 16px;">
+                      No pickups recorded yet.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- System Administration -->
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">⚙️ System Testing & Utilities</h2>
+            </div>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+              <button class="btn btn-accent btn-load-demo-data">
+                ✨ Load Demo Data
+              </button>
+              <button class="btn btn-danger btn-reset-db">
+                ⚠️ Reset Database
+              </button>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </aside>
+
+    <!-- Right Interactive Map Panel -->
+    <section class="map-panel">
+      <!-- Leaflet Map Element -->
+      <div id="map"></div>
+
+      <!-- Map Picker Floating Banner -->
+      <div id="map-picker-banner" class="map-picker-banner" style="display: none;">
+        <span>🎯 Click anywhere inside India on the map to set coordinates</span>
+        <button id="map-picker-cancel-btn" class="map-picker-cancel">Cancel</button>
+      </div>
+
+      <!-- Floating Map Layer Toggles -->
+      <div class="map-overlay-top">
+        <div class="map-card">
+          <div class="legend-title">🗺️ Map Layers</div>
+          <div class="layer-toggles">
+            <label class="layer-toggle-item">
+              <input type="checkbox" id="layer-toggle-states" checked>
+              <span>State Boundaries</span>
+            </label>
+            <label class="layer-toggle-item">
+              <input type="checkbox" id="layer-toggle-bins" checked>
+              <span>Waste Bins</span>
+            </label>
+            <label class="layer-toggle-item">
+              <input type="checkbox" id="layer-toggle-trucks" checked>
+              <span>Garbage Trucks</span>
+            </label>
+            <label class="layer-toggle-item">
+              <input type="checkbox" id="layer-toggle-routes" checked>
+              <span>Planned Routes</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Floating Map Legend -->
+      <div class="map-legend">
+        <div class="legend-title">Legend</div>
+        <div class="legend-group">
+          <div style="font-weight: 600; margin-bottom: 3px;">Bin Fill Levels:</div>
+          <div class="legend-item"><span class="legend-dot" style="background: #10b981;"></span> Under 50%</div>
+          <div class="legend-item"><span class="legend-dot" style="background: #f59e0b;"></span> 50% to Threshold</div>
+          <div class="legend-item"><span class="legend-dot" style="background: #ef4444;"></span> &ge; Threshold (Needs Pickup)</div>
+        </div>
+        <div class="legend-group">
+          <div style="font-weight: 600; margin-bottom: 3px;">State Demarcation:</div>
+          <div class="legend-item"><span class="legend-dot" style="background: rgba(16, 185, 129, 0.5);"></span> 0 Bins Needing Pickup</div>
+          <div class="legend-item"><span class="legend-dot" style="background: rgba(245, 158, 11, 0.6);"></span> 1 - 2 Bins Needing Pickup</div>
+          <div class="legend-item"><span class="legend-dot" style="background: rgba(239, 68, 68, 0.7);"></span> 3+ Bins Needing Pickup</div>
+        </div>
+        <div>
+          <span style="font-weight: 600;">Blue Line:</span> Optimal Collection Route
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ===================================================================
+       MODALS
+       =================================================================== -->
+
+  <!-- Modal: Update Ultrasonic Reading -->
+  <div class="modal-backdrop" id="modal-update-reading">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>📶 Update Bin Ultrasonic Reading</h3>
+        <button class="toast-close" onclick="UI.closeModal('modal-update-reading')">&times;</button>
+      </div>
+      <form id="form-update-reading">
+        <div class="modal-body">
+          <input type="hidden" id="reading-modal-bin-id">
+          <p style="font-size: 0.88rem; margin-bottom: 12px;">
+            Target Bin: <b id="reading-modal-bin-name">-</b> | Total Height: <b id="reading-modal-height">100</b> cm | Current Fill: <b id="reading-modal-current-fill">0%</b>
+          </p>
+
+          <div class="form-group">
+            <label for="reading-modal-distance">Ultrasonic Sensor Distance (cm) *</label>
+            <input type="number" step="0.1" min="0" id="reading-modal-distance" placeholder="Distance from sensor to waste surface" required>
+            <small style="color: var(--text-muted); display: block; margin-top: 4px;">
+              Formula: Fill % = ((Bin Height - Distance) / Bin Height) &times; 100
+            </small>
+          </div>
+
+          <div id="reading-modal-preview" style="font-size: 0.84rem; padding: 8px; background: var(--bg-secondary); border-radius: 4px; margin-top: 6px;">
+            Enter distance above to preview fill %
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="UI.closeModal('modal-update-reading')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Reading</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Bin Reading History -->
+  <div class="modal-backdrop" id="modal-bin-history">
+    <div class="modal-content" style="max-width: 550px;">
+      <div class="modal-header">
+        <h3>📜 Telemetry History: <span id="bin-history-modal-name">-</span></h3>
+        <button class="toast-close" onclick="UI.closeModal('modal-bin-history')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="table-responsive">
+          <table>
+            <thead>
+              <tr>
+                <th>Reading ID</th>
+                <th>Distance (cm)</th>
+                <th>Fill Level (%)</th>
+                <th>Timestamp</th>
+              </tr>
+            </thead>
+            <tbody id="bin-history-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="UI.closeModal('modal-bin-history')">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Edit Bin -->
+  <div class="modal-backdrop" id="modal-edit-bin">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>✏️ Edit Bin Details</h3>
+        <button class="toast-close" onclick="UI.closeModal('modal-edit-bin')">&times;</button>
+      </div>
+      <form id="form-edit-bin">
+        <div class="modal-body">
+          <input type="hidden" id="edit-bin-id">
+          
+          <div class="form-group">
+            <label for="edit-bin-name">Bin Name *</label>
+            <input type="text" id="edit-bin-name" required>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="edit-bin-state">State *</label>
+              <input type="text" id="edit-bin-state" required>
+            </div>
+            <div class="form-group">
+              <label for="edit-bin-city">City *</label>
+              <input type="text" id="edit-bin-city" required>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="edit-bin-lat">Latitude *</label>
+              <input type="number" step="0.000001" id="edit-bin-lat" required>
+            </div>
+            <div class="form-group">
+              <label for="edit-bin-lng">Longitude *</label>
+              <input type="number" step="0.000001" id="edit-bin-lng" required>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="edit-bin-height">Height (cm) *</label>
+              <input type="number" id="edit-bin-height" required>
+            </div>
+            <div class="form-group">
+              <label for="edit-bin-threshold">Threshold (%) *</label>
+              <input type="number" id="edit-bin-threshold" required>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="UI.closeModal('modal-edit-bin')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Update Bin</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Update Truck Location -->
+  <div class="modal-backdrop" id="modal-update-truck-location">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>📍 Update Truck GPS: <span id="truck-loc-number">-</span></h3>
+        <button class="toast-close" onclick="UI.closeModal('modal-update-truck-location')">&times;</button>
+      </div>
+      <form id="form-update-truck-location">
+        <div class="modal-body">
+          <input type="hidden" id="truck-loc-id">
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label for="truck-loc-lat">New Latitude *</label>
+              <input type="number" step="0.000001" id="truck-loc-lat" required>
+            </div>
+            <div class="form-group">
+              <label for="truck-loc-lng">New Longitude *</label>
+              <input type="number" step="0.000001" id="truck-loc-lng" required>
+            </div>
+          </div>
+
+          <div style="margin-bottom: 12px;">
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-pick-truck-loc-coord">
+              📍 Pick on Map
+            </button>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="UI.closeModal('modal-update-truck-location')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Update GPS</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Confirmation Dialog -->
+  <div class="modal-backdrop" id="modal-confirm">
+    <div class="modal-content" style="max-width: 420px;">
+      <div class="modal-header">
+        <h3>Confirm Action</h3>
+        <button class="toast-close" onclick="UI.closeModal('modal-confirm')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p id="confirm-modal-message" style="font-size: 0.9rem; color: var(--text-main);">
+          Are you sure you want to proceed?
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="UI.closeModal('modal-confirm')">Cancel</button>
+        <button type="button" class="btn btn-danger" id="confirm-modal-ok">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CDN Dependencies (Pinned) -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="https://unpkg.com/chart.js@4.4.2/dist/chart.umd.js"></script>
+
+  <!-- Application Modules -->
+  <script src="js/api.js"></script>
+  <script src="js/map.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
