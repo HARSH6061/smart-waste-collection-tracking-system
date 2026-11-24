@@ -1297,7 +1297,12 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Start Server
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Smart Waste Collection Tracking Server running on http://localhost:${PORT}`);
-});
+// Export app for serverless deployment (Vercel)
+module.exports = app;
+
+// Start Server locally or on traditional hosts
+if (!process.env.VERCEL) {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Smart Waste Collection Tracking Server running on http://localhost:${PORT}`);
+  });
+}
